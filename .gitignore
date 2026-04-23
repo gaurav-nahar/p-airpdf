@@ -46,8 +46,3 @@ frontend/dist/
 frontend/.eslintcache
 frontend/*.tsbuildinfo
 
-# Local SSL keys/certs
-frontend/ssl/*.pem
-ssl/
-*.key
-*.pem
