@@ -1,0 +1,13 @@
+
+DATABASE_URL=postgresql://postgres:123456GN@my-postgres:5432/liquidtext
+
+DB_HOST=my-postgres
+DB_PORT=5432
+DB_NAME=liquidtext
+DB_USER=postgres
+DB_PASSWORD=123456GN
+
+REDIS_URL=redis://redis:6379/0
+
+SUMMARY_SERVICE_URL=http://172.25.0.235:8010/summarize
+SUMMARY_SERVICE_TIMEOUT=900

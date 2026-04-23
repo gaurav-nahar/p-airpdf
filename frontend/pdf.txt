@@ -1,0 +1,151 @@
+# 🧠 Frontend Codebase Logic: The "Deep Dive" Manual
+
+This document is the **definitive technical reference** for the "Liquid Text Clone" frontend. It details the exact file-to-function call traces, libraries used, and the algorithmic logic behind every feature.
+
+---
+
+## 🏗️ Core Architecture & Libraries
+*   **Framework:** React 18 (Functional Components, Hooks)
+*   **PDF Engine:** `pdfjs-dist` (Parsed in Web Worker)
+*   **State Management:** React `useState` (Local State) + `useRef` (Mutable/Performance Refs)
+*   **Drawing Engine:** `react-konva` (Canvas Wrapper)
+*   **Networking:** `axios` (HTTP Requests)
+*   **Persistence:** `localStorage` (Throttled Sync)
+
+---
+
+## 1. 🎮 Feature: Control Center (Navbar)
+**Goal:** Manage Toolbar, Tool States, and Global Actions.
+
+| Component / Hook | Role | Logic / Method Used |
+| :--- | :--- | :--- |
+| **`Navbar.js`** | **UI Component** | **Tool Switching:** Sets `tool` state (Select, Pen, etc.) which is passed down to `App.js`.<br>**Search:** Inputs `searchText`. Calls `onNextMatch` / `onPrevMatch` prop functions to scroll PDF.<br>**Save Trigger:** Calls `onSave` passed from `App.js`. |
+| **`App.js`** | **State Manager** | **Central State:** Holds `tool`, `searchText`, `saving` states. Distributes them to `PDFViewer` and `Workspace` so they react to tool changes. |
+
+---
+
+## 2. 📖 Feature: PDF Loading (The Engine)
+**Goal:** Rendering 500+ pages without UI freeze.
+
+### 📚 Libraries Used
+*   `pdfjs-dist/build/pdf` (Main Lib)
+*   `pdfjs-dist/build/pdf.worker.entry` (Worker Thread)
+*   `IntersectionObserver` (Browser API)
+
+### 📍 Trace: Start to Finish
+| Step | File | Function | Logic / Method Used |
+| :--- | :--- | :--- | :--- |
+| **1** | `App.js` | `handlePDFSelect` | **User Action:** Selects file.<br>**Method:** `URL.createObjectURL(file)` creates a temporary `blob:` URL.<br>**State:** Updates `selectedPDF` state. |
+| **2** | `PDFViewer.js` | `useEffect([fileUrl])` | **Trigger:** Detects URL change. Calls `setupPDF` from loader. |
+| **3** | `pdfLoader.js` | `setupPDF` | **Library:** `pdfjsLib.getDocument()` spawns a Worker thread to parse binary. |
+| **4** | `pdfLoader.js` | `setupPDF (Batch Loop)` | **Logic:** Uses `for` loop with `BATCH_SIZE=20`.<br>**Method:** `await Promise.all()` processes 20 pages in parallel before moving to the next batch. This prevents CPU choking. |
+| **5** | `pdfLoader.js` | `setupPDF (DOM)` | **Logic:** Creates 20 empty `<div>` wrappers.<br>**Method:** `page.getViewport({scale})` gets exact dimensions. |
+| **6** | `PDFViewer.js` | `IntersectionObserver` | **Logic:** Watches invalid `<div>` wrappers.<br>**API:** `new IntersectionObserver(callback, { threshold: 0.05 })`. |
+| **7** | `PDFViewer.js` | `Observer Callback` | **Logic:** When a wrapper enters viewport (`isIntersecting`), calls `renderPage`. |
+| **8** | `pdfLoader.js` | `renderPage` | **Library:** `page.render({ canvasContext })` paints pixels to `<canvas>`.<br>**Library:** `pdfjsLib.renderTextLayer()` overlays invisible text for selection. |
+
+---
+
+## 3. ✂️ Feature: Text Selection & Drag (The Packet)
+**Goal:** Extract text from PDF Canvas and drop as note.
+
+### 📍 Trace: Selection Phase
+| Role | File | Function | Logic / Method Used |
+| :--- | :--- | :--- | :--- |
+| **Logic** | `pdfSelection.js` | `handleMouseUp` | **API:** `window.getSelection()` gets the highlighted text.<br>**API:** `Range.getBoundingClientRect()` gets pixel coordinates of the highlight. |
+| **Calculations** | `pdfDragHandlers.js` | `handleTextDragStart` | **Algorithm:** Converts Screen Pixels -> Page Percentages.<br>`xPct = (selectionX - canvasX) / canvasWidth`.<br>Ensures selection stays accurate on Zoom. |
+| **Packing** | `pdfDragHandlers.js` | `handleTextDragStart` | **Method:** `e.dataTransfer.setData()`.<br>**Serialization:** `JSON.stringify({ type: 'text', xPct: 0.5, ... })`. |
+
+### 📍 Trace: Drop Phase
+| Role | File | Function | Logic / Method Used |
+| :--- | :--- | :--- | :--- |
+| **Trigger** | `App.js` | `onDrop` | Event listener on main Workspace `div`. |
+| **Unpacking** | `useSnippetHandlers.js` | `handleSnippetDrop` | **Method:** `JSON.parse(e.dataTransfer.getData())`. |
+| **State** | `App.js` | `setSnippets` | **Logic:** Adds new object to array.<br>**Position:** `x = e.clientX` sets the note exactly under the mouse cursor. |
+
+---
+
+## 4. 📸 Feature: Image Selection (Canvas Extraction)
+**Goal:** Crop pixels from PDF Canvas.
+
+### 📍 Trace: Interaction
+| Step | File | Function | Logic / Method Used |
+| :--- | :--- | :--- | :--- |
+| **1** | `pdfSelection.js` | `handlePointerDown` | Allows user to draw a red box (`div.selection-box`) over the PDF. |
+| **2** | `pdfImageSelection.js` | `handleImageSelection` | **Logic:** Runs collision detection to find *which* PDF page is under the red box. |
+| **3** | `pdfImageSelection.js` | `handleImageSelection` | **API:** `ctx.getImageData(x, y, w, h)` extracts raw RGBA pixel data from the canvas. |
+| **4** | `pdfImageSelection.js` | `handleImageSelection` | **Method:** `canvas.toDataURL("image/png")` converts pixels to a base64 string. |
+| **5** | `pdfDragHandlers.js` | `attachImageDragHandler` | Creates a temporary draggable `<img>` tag so user can drag the "ghost" image. |
+
+---
+
+## 5. 📦 Feature: Text Boxes (Creation vs Interaction)
+**Goal:** Create new boxes (Hook) and Edit them (Component).
+
+### 📍 Phase 1: Creation (Hook)
+**File:** `useBoxHandlers.js`
+*   **Logic:** Uses `useRef` for performance (avoiding re-renders during drag).
+*   **Method:** `handlePointerMove` calculates `width = currentX - startX`. Updates a temp visual box.
+*   **Commit:** `handlePointerUp` checks `if (width > 10)` (prevents accidental tiny boxes) -> calls `setEditableBoxes` in `App.js`.
+
+### 📍 Phase 2: Interaction (Component)
+**File:** `EditableTextBoxes.js`
+*   **Logic:** Implements "Sticky Dragging".
+*   **Method:** `window.addEventListener('mousemove')` is used instead of `onMouseMove`.
+    *   *Why?* If you drag fast, the mouse leaves the box. Window listener ensures we keep tracking.
+*   **Context Menu:** Custom "Right Click" menu.
+    *   **Logic:** Uses `localStorage.setItem('clipboardBox')` to implement Copy/Paste across sessions.
+
+---
+
+## 6. ✏️ Feature: Freehand Drawing (Konva)
+**Goal:** Vector-like drawing on HTML5 Canvas.
+
+### 📚 Library Used
+*   `react-konva` (`Stage`, `Layer`, `Line`)
+
+### 📍 Trace: Rendering (REDUNDANCY NOTE)
+**⚠️ Redundancy: Logic exists in both Hook and Component.**
+
+| Component / Hook | Role | Logic / Method Used |
+| :--- | :--- | :--- |
+| **Hook** | `useDrawingHandlers.js` | **(Shadowed)** Implements logic but is currently ignored by the component. |
+| **Component** | **`DrawingCanvas.js`** | **(Active Logic)** Defines its own local `handlePointerDown/Move/Up`.<br>**Pen:** Appends `[x,y]` to `lines` state (passed via props/setLines).<br>**Eraser:** Uses local `isNear` logic to filter lines. |
+
+---
+
+## 7. 🧵 Feature: Connections (SVG Layer)
+**Goal:** Reactive lines linking components.
+
+### 📍 Trace: Logic
+| Component / Hook | Role | Logic / Method Used |
+| :--- | :--- | :--- |
+| **Hook** | **`useConnections.js`** | **Logic (Linking):** Handles click events on notes. Maintains `lineStartId` state.<br>**Condition:** If `tool === DRAW_LINE`, clicking Note A then Note B creates a `{from, to}` connection. |
+| **Component** | **`ConnectionLines.js`** | **Logic (Rendering):** Pure Function Component (Memoized).<br>**Optimization:** Uses `useMemo` to create an `ItemMap` (`id -> object`) for O(1) coordinate lookup.<br>**DOM:** Renders simple `<line>` tags. React updates them automatically when notes move. |
+
+---
+
+## 8. 💾 Feature: Persistence (API & Local)
+**Goal:** Save data to Backend and LocalStorage.
+
+### 📍 Trace: Auto-Save (Local)
+**File:** `useLocalStorageSync.js`
+*   **Method:** `setTimeout` inside `useEffect`.
+*   **Logic (Throttling):** "Debouncing".
+    *   If user types, we wait 1 second.
+    *   If user types again within 1 second, we `clearTimeout` and wait again.
+    *   Calculates Save only when user stops typing.
+
+### 📍 Trace: Backend Save (API)
+**File:** `App.js` -> `saveWorkspace`
+*   **Library:** `axios` (via `api.js`).
+*   **Method:** `new FormData()`.
+    *   Loops through all `snippets`. If `snippet.file` (Blob) exists, appends as binary.
+    *   Loops through all `lines` (JSON data).
+*   **Logic (Reconciliation):**
+    *   Backward returns: `{ temp_id_1: db_id_55 }`.
+    *   Frontend **MUST** loop through state and replace temporary IDs with DB IDs.
+
+---
+
+This manual covers the complete lifecycle of data in the Liquid Text Clone frontend.

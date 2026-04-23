@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16
+    container_name: my-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456GN
+      POSTGRES_DB: liquidtext
+    ports:
+    - "5433:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    build: ./backend
+    container_name: backend
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8005:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: "postgresql://postgres:123456GN@db:5432/liquidtext"
+      REDIS_URL: "redis://redis:6379/0"
+      SUMMARY_SERVICE_URL: "http://172.253.0.1:8010/summarize"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./ssl:/app/ssl
+    command: sh -c "sleep 10 && yoyo apply --database postgresql://postgres:123456GN@db:5432/liquidtext ./src/yoyo && gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --certfile=/app/ssl/backend.crt --keyfile=/app/ssl/backend.key --timeout 120 --keep-alive 5"
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    depends_on:
+      - backend
+    ports:
+      - "3001:3000"
+    volumes:
+    - ./ssl:/app/ssl
+
+volumes:
+  postgres_data:

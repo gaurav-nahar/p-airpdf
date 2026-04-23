@@ -1,0 +1,53 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Python backend
+backend/.venv/
+backend/venv/
+backend/env/
+backend/backend_env/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+backend/nohup.out
+*.py[cod]
+
+# Node frontend
+frontend/node_modules/
+frontend/.npm/
+frontend/.pnpm-store/
+frontend/.yarn/
+frontend/.cache/
+frontend/.next/
+frontend/.nuxt/
+frontend/coverage/
+frontend/build/
+frontend/dist/
+frontend/.eslintcache
+frontend/*.tsbuildinfo
+
+# Local SSL keys/certs
+frontend/ssl/*.pem
+ssl/
+*.key
+*.pem
