@@ -1,5 +1,5 @@
 -- alter all table
--- depends: 20260109_01_ssbQw-create-highlights-table
+-- depends: 20260116_02_aKK1X-create-workspace-table
 
 ALTER TABLE boxes ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE;
 ALTER TABLE lines ADD COLUMN IF NOT EXISTS workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE;

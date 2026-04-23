@@ -1,5 +1,5 @@
 -- create workspace table
--- depends: 20260116_01_N6T0p-alter-all-table
+-- depends: 20260109_01_ssbQw-create-highlights-table
 
 
 CREATE TABLE IF NOT EXISTS workspaces (
